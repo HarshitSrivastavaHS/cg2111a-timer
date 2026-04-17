@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Timer</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #11111a;
+    --surface2: #18182a;
+    --border: rgba(255,255,255,0.07);
+    --mission: #4fa3e8;
+    --mission-dim: rgba(79,163,232,0.12);
+    --map: #e86b8a;
+    --map-dim: rgba(232,107,138,0.12);
+    --warn: #e8b84f;
+    --warn-dim: rgba(232,184,79,0.12);
+    --done: #6be89a;
+    --done-dim: rgba(107,232,154,0.12);
+    --text: #f0f0f5;
+    --muted: rgba(240,240,245,0.4);
+    --faint: rgba(240,240,245,0.1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* animated grid bg */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* glow orb behind timer */
+  .glow-orb {
+    position: fixed;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--glow-color, rgba(79,163,232,0.08)) 0%, transparent 70%);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 0;
+    transition: background 0.6s ease;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 700px;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  /* top bar */
+  .topbar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .phase-tag {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color 0.4s;
+  }
+
+  .phase-pip {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.4s, box-shadow 0.4s;
+  }
+
+  .phase-pip.active-mission {
+    background: var(--mission);
+    box-shadow: 0 0 8px var(--mission);
+  }
+
+  .phase-pip.active-map {
+    background: var(--map);
+    box-shadow: 0 0 8px var(--map);
+  }
+
+  .phase-pip.active-done {
+    background: var(--done);
+    box-shadow: 0 0 8px var(--done);
+  }
+
+  .phase-tag.active-mission { color: var(--mission); }
+  .phase-tag.active-map { color: var(--map); }
+  .phase-tag.active-done { color: var(--done); }
+
+  .topbar-right {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  /* main timer */
+  .timer-block {
+    text-align: center;
+    position: relative;
+  }
+
+  .timer-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(7rem, 20vw, 12rem);
+    line-height: 0.9;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    transition: color 0.4s;
+    position: relative;
+    z-index: 1;
+  }
+
+  .timer-num.c-mission { color: var(--mission); }
+  .timer-num.c-map { color: var(--map); }
+  .timer-num.c-warn { color: var(--warn); }
+  .timer-num.c-done { color: var(--done); }
+
+  .timer-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 0.5rem;
+    transition: color 0.4s;
+  }
+
+  .timer-sub.c-mission { color: rgba(79,163,232,0.6); }
+  .timer-sub.c-map { color: rgba(232,107,138,0.6); }
+  .timer-sub.c-done { color: rgba(107,232,154,0.6); }
+
+  /* progress arc */
+  .arc-wrap {
+    position: absolute;
+    inset: -24px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .arc-wrap svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+
+  .arc-track {
+    fill: none;
+    stroke: var(--faint);
+    stroke-width: 2;
+  }
+
+  .arc-fill {
+    fill: none;
+    stroke: var(--mission);
+    stroke-width: 2;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.25s linear, stroke 0.4s;
+  }
+
+  /* linear progress bar */
+  .progress-row {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .progress-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 3px;
+    background: var(--faint);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--mission);
+    width: 100%;
+    transition: width 0.25s linear, background 0.4s;
+  }
+
+  /* segment indicators */
+  .segments {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+  }
+
+  .seg {
+    flex: 1;
+    height: 3px;
+    border-radius: 99px;
+    background: var(--faint);
+    transition: background 0.3s;
+  }
+
+  .seg.used { background: var(--mission); }
+  .seg.used-map { background: var(--map); }
+
+  /* toast */
+  .toast {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    min-height: 18px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.05em;
+    transition: color 0.3s, opacity 0.3s;
+  }
+
+  .toast.t-warn { color: var(--warn); }
+  .toast.t-done { color: var(--done); }
+
+  /* buttons */
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn {
+    padding: 10px 26px;
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    transition: background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.2s;
+  }
+
+  .btn:hover:not(:disabled) { background: var(--surface2); border-color: rgba(255,255,255,0.15); }
+  .btn:active:not(:disabled) { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .btn-start {
+    background: var(--mission-dim);
+    border-color: rgba(79,163,232,0.3);
+    color: var(--mission);
+  }
+  .btn-start:hover:not(:disabled) { background: rgba(79,163,232,0.2); }
+
+  .btn-stop {
+    background: var(--map-dim);
+    border-color: rgba(232,107,138,0.3);
+    color: var(--map);
+  }
+  .btn-stop:hover:not(:disabled) { background: rgba(232,107,138,0.2); }
+
+  .btn-restart {
+    background: var(--done-dim);
+    border-color: rgba(107,232,154,0.3);
+    color: var(--done);
+    display: none;
+  }
+  .btn-restart.show { display: inline-block; }
+  .btn-restart:hover:not(:disabled) { background: rgba(107,232,154,0.2); }
+
+  .btn-reset {
+    background: transparent;
+    border-color: rgba(255,255,255,0.1);
+    color: var(--muted);
+    font-size: 12px;
+    padding: 8px 18px;
+    display: none;
+  }
+  .btn-reset.show { display: inline-block; }
+  .btn-reset:hover:not(:disabled) { background: rgba(255,255,255,0.05); color: var(--text); }
+
+  /* summary */
+  .summary {
+    width: 100%;
+    display: none;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .summary.show { display: flex; }
+
+  .summary-header {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .summary-row:last-child { border-bottom: none; }
+
+  .summary-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .summary-val.highlight { color: var(--mission); }
+  .summary-val.highlight-map { color: var(--map); }
+
+  /* pulse animation on active pip */
+  @keyframes pip-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .phase-pip.active-mission,
+  .phase-pip.active-map {
+    animation: pip-pulse 1.4s ease-in-out infinite;
+  }
+
+  /* big number tick animation */
+  @keyframes tick-flash {
+    0% { opacity: 0.6; }
+    100% { opacity: 1; }
+  }
+
+  .timer-num.tick { animation: tick-flash 0.08s ease; }
+
+  @media (max-width: 500px) {
+    .wrapper { padding: 1rem; gap: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="glow-orb" id="glowOrb"></div>
+
+<div class="wrapper">
+
+  <div class="topbar">
+    <div class="phase-tag" id="phaseTag">
+      <div class="phase-pip" id="phasePip"></div>
+      <span id="phaseText">Ready</span>
+    </div>
+    <div class="topbar-right" id="topbarRight">— — —</div>
+  </div>
+
+  <div class="timer-block">
+    <div class="timer-num" id="timerNum">8:00</div>
+    <div class="timer-sub" id="timerSub">mission timer</div>
+  </div>
+
+  <div class="progress-row">
+    <div class="progress-labels">
+      <span>elapsed</span>
+      <span id="progressPct">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+  </div>
+
+  <div class="segments" id="segments"></div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="btn-row">
+    <button class="btn btn-start" id="startBtn">Start mission</button>
+    <button class="btn btn-stop" id="stopBtn" disabled>End mission early</button>
+    <button class="btn btn-restart" id="restartBtn">New team ↺</button>
+    <button class="btn btn-reset" id="resetBtn">Reset ✕</button>
+  </div>
+
+  <div class="summary" id="summary">
+    <div class="summary-header">Team summary</div>
+    <div class="summary-row">
+      <span>Mission time used</span>
+      <span class="summary-val highlight" id="sumUsed">—</span>
+    </div>
+    <div class="summary-row">
+      <span>Time remaining (unused)</span>
+      <span class="summary-val" id="sumUnused">—</span>
+    </div>
+    <div class="summary-row">
+      <span>Out of total mission</span>
+      <span class="summary-val" id="sumTotal">8:00</span>
+    </div>
+    <div class="summary-row">
+      <span>Map phase</span>
+      <span class="summary-val highlight-map" id="sumMap">1:00 (completed)</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const MISSION = 8 * 60;
+  const MAP = 60;
+  const SEG_COUNT = 8;
+
+  let phase = 'idle';
+  let rem = MISSION;
+  let missionUsed = 0;
+  let iv = null;
+
+  const timerNum = document.getElementById('timerNum');
+  const timerSub = document.getElementById('timerSub');
+  const phaseTag = document.getElementById('phaseTag');
+  const phasePip = document.getElementById('phasePip');
+  const phaseText = document.getElementById('phaseText');
+  const topbarRight = document.getElementById('topbarRight');
+  const progressFill = document.getElementById('progressFill');
+  const progressPct = document.getElementById('progressPct');
+  const toast = document.getElementById('toast');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const summary = document.getElementById('summary');
+  const sumUsed = document.getElementById('sumUsed');
+  const sumUnused = document.getElementById('sumUnused');
+  const sumTotal = document.getElementById('sumTotal');
+  const sumMap = document.getElementById('sumMap');
+  const segsEl = document.getElementById('segments');
+  const glowOrb = document.getElementById('glowOrb');
+
+  function fmt(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m + ':' + String(sec).padStart(2, '0');
+  }
+
+  function buildSegs() {
+    segsEl.innerHTML = '';
+    for (let i = 0; i < SEG_COUNT; i++) {
+      const d = document.createElement('div');
+      d.className = 'seg';
+      d.id = 'seg' + i;
+      segsEl.appendChild(d);
+    }
+  }
+
+  function updateSegs() {
+    const used = MISSION - rem;
+    const usedFrac = used / MISSION;
+    const usedSegs = Math.floor(usedFrac * SEG_COUNT);
+    for (let i = 0; i < SEG_COUNT; i++) {
+      const el = document.getElementById('seg' + i);
+      if (phase === 'map' || phase === 'done') {
+        el.className = 'seg ' + (i < Math.floor(missionUsed / MISSION * SEG_COUNT) ? 'used' : '');
+      } else {
+        el.className = 'seg ' + (i < usedSegs ? 'used' : '');
+      }
+    }
+  }
+
+  function setGlow(color) {
+    glowOrb.style.background = `radial-gradient(circle, ${color} 0%, transparent 70%)`;
+  }
+
+  function applyPhaseStyle() {
+    phaseTag.className = 'phase-tag';
+    phasePip.className = 'phase-pip';
+    timerNum.className = 'timer-num';
+    timerSub.className = 'timer-sub';
+
+    if (phase === 'mission') {
+      phaseTag.classList.add('active-mission');
+      phasePip.classList.add('active-mission');
+      phaseText.textContent = 'Mission timer';
+      timerSub.textContent = 'mission timer';
+      timerNum.classList.add('c-mission');
+      timerSub.classList.add('c-mission');
+      progressFill.style.background = 'var(--mission)';
+      setGlow('rgba(79,163,232,0.1)');
+      topbarRight.textContent = '8:00 total';
+    } else if (phase === 'map') {
+      phaseTag.classList.add('active-map');
+      phasePip.classList.add('active-map');
+      phaseText.textContent = 'Map timer';
+      timerSub.textContent = 'map timer';
+      timerNum.classList.add('c-map');
+      timerSub.classList.add('c-map');
+      progressFill.style.background = 'var(--map)';
+      setGlow('rgba(232,107,138,0.1)');
+      topbarRight.textContent = '1:00 total';
+    } else if (phase === 'done') {
+      phaseTag.classList.add('active-done');
+      phasePip.classList.add('active-done');
+      phaseText.textContent = 'Complete';
+      timerSub.textContent = 'all done';
+      timerNum.classList.add('c-done');
+      timerSub.classList.add('c-done');
+      setGlow('rgba(107,232,154,0.1)');
+    } else {
+      phaseText.textContent = 'Ready';
+      timerSub.textContent = 'mission timer';
+      topbarRight.textContent = '— — —';
+    }
+  }
+
+  function flashTick() {
+    timerNum.classList.remove('tick');
+    void timerNum.offsetWidth;
+    timerNum.classList.add('tick');
+  }
+
+  function startMission() {
+    phase = 'mission';
+    rem = MISSION;
+    missionUsed = 0;
+    summary.classList.remove('show');
+    restartBtn.classList.remove('show');
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    toast.textContent = '';
+    toast.className = 'toast';
+    resetBtn.classList.add('show');
+    applyPhaseStyle();
+    buildSegs();
+    doTick();
+    iv = setInterval(doTick, 1000);
+  }
+
+  function startMap() {
+    clearInterval(iv);
+    phase = 'map';
+    rem = MAP;
+    stopBtn.disabled = true;
+    toast.textContent = 'Mission ended — map phase begins';
+    toast.className = 'toast t-warn';
+    applyPhaseStyle();
+    updateSegs();
+    doTick();
+    iv = setInterval(doTick, 1000);
+  }
+
+  function endEarly() {
+    if (phase !== 'mission') return;
+    missionUsed = MISSION - rem;
+    startMap();
+  }
+
+  function finish() {
+    clearInterval(iv);
+    phase = 'done';
+    applyPhaseStyle();
+    timerNum.textContent = '0:00';
+    progressFill.style.width = '0%';
+    progressPct.textContent = '100%';
+    toast.textContent = 'Map phase complete — time\'s up!';
+    toast.className = 'toast t-done';
+    stopBtn.disabled = true;
+    restartBtn.classList.add('show');
+
+    const unused = MISSION - missionUsed;
+    sumUsed.textContent = fmt(missionUsed);
+    sumUnused.textContent = unused > 0 ? fmt(unused) : '0:00';
+    sumTotal.textContent = fmt(missionUsed) + ' / 8:00';
+    sumMap.textContent = '1:00 (completed)';
+    summary.classList.add('show');
+    updateSegs();
+
+    for (let i = 0; i < SEG_COUNT; i++) {
+      const el = document.getElementById('seg' + i);
+      if (el.classList.contains('used')) el.classList.add('used');
+    }
+  }
+
+  function doTick() {
+    if (phase === 'mission') {
+      timerNum.textContent = fmt(rem);
+      flashTick();
+      const elapsed = MISSION - rem;
+      const pct = Math.round(elapsed / MISSION * 100);
+      progressFill.style.width = ((rem / MISSION) * 100) + '%';
+      progressPct.textContent = pct + '%';
+      updateSegs();
+
+      if (rem <= 30 && rem > 0) {
+        timerNum.className = 'timer-num c-warn tick';
+        toast.textContent = 'Mission time almost up!';
+        toast.className = 'toast t-warn';
+      }
+
+      if (rem <= 0) { missionUsed = MISSION; startMap(); return; }
+      rem--;
+
+    } else if (phase === 'map') {
+      timerNum.textContent = fmt(rem);
+      flashTick();
+      const pct = Math.round((MAP - rem) / MAP * 100);
+      progressFill.style.width = ((rem / MAP) * 100) + '%';
+      progressPct.textContent = pct + '%';
+
+      if (rem <= 15 && rem > 0) {
+        timerNum.className = 'timer-num c-warn tick';
+        toast.textContent = 'Map phase ending soon!';
+        toast.className = 'toast t-warn';
+      }
+
+      if (rem <= 0) { finish(); return; }
+      rem--;
+    }
+  }
+
+  function restart() {
+    clearInterval(iv);
+    phase = 'idle';
+    rem = MISSION;
+    missionUsed = 0;
+    timerNum.textContent = '8:00';
+    timerNum.className = 'timer-num';
+    timerSub.className = 'timer-sub';
+    progressFill.style.width = '100%';
+    progressFill.style.background = 'var(--mission)';
+    progressPct.textContent = '0%';
+    summary.classList.remove('show');
+    restartBtn.classList.remove('show');
+    resetBtn.classList.remove('show');
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    toast.textContent = '';
+    toast.className = 'toast';
+    setGlow('rgba(79,163,232,0.08)');
+    applyPhaseStyle();
+    buildSegs();
+  }
+
+  startBtn.addEventListener('click', startMission);
+  stopBtn.addEventListener('click', endEarly);
+  restartBtn.addEventListener('click', restart);
+  resetBtn.addEventListener('click', restart);
+
+  buildSegs();
+  setGlow('rgba(79,163,232,0.06)');
+</script>
+</body>
+</html>
