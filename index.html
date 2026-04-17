@@ -37,7 +37,6 @@
     overflow: hidden;
   }
 
-  /* animated grid bg */
   body::before {
     content: '';
     position: fixed;
@@ -50,7 +49,6 @@
     z-index: 0;
   }
 
-  /* glow orb behind timer */
   .glow-orb {
     position: fixed;
     width: 500px;
@@ -77,7 +75,6 @@
     gap: 2rem;
   }
 
-  /* top bar */
   .topbar {
     width: 100%;
     display: flex;
@@ -135,7 +132,6 @@
     letter-spacing: 0.08em;
   }
 
-  /* main timer */
   .timer-block {
     text-align: center;
     position: relative;
@@ -171,35 +167,6 @@
   .timer-sub.c-map { color: rgba(232,107,138,0.6); }
   .timer-sub.c-done { color: rgba(107,232,154,0.6); }
 
-  /* progress arc */
-  .arc-wrap {
-    position: absolute;
-    inset: -24px;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .arc-wrap svg {
-    width: 100%;
-    height: 100%;
-    transform: rotate(-90deg);
-  }
-
-  .arc-track {
-    fill: none;
-    stroke: var(--faint);
-    stroke-width: 2;
-  }
-
-  .arc-fill {
-    fill: none;
-    stroke: var(--mission);
-    stroke-width: 2;
-    stroke-linecap: round;
-    transition: stroke-dashoffset 0.25s linear, stroke 0.4s;
-  }
-
-  /* linear progress bar */
   .progress-row {
     width: 100%;
     display: flex;
@@ -232,7 +199,6 @@
     transition: width 0.25s linear, background 0.4s;
   }
 
-  /* segment indicators */
   .segments {
     display: flex;
     gap: 4px;
@@ -250,7 +216,6 @@
   .seg.used { background: var(--mission); }
   .seg.used-map { background: var(--map); }
 
-  /* toast */
   .toast {
     font-size: 13px;
     color: var(--muted);
@@ -264,7 +229,6 @@
   .toast.t-warn { color: var(--warn); }
   .toast.t-done { color: var(--done); }
 
-  /* buttons */
   .btn-row {
     display: flex;
     gap: 10px;
@@ -304,6 +268,20 @@
   }
   .btn-stop:hover:not(:disabled) { background: rgba(232,107,138,0.2); }
 
+  .btn-pause {
+    background: rgba(232,184,79,0.12);
+    border-color: rgba(232,184,79,0.3);
+    color: var(--warn);
+  }
+  .btn-pause:hover:not(:disabled) { background: rgba(232,184,79,0.2); }
+
+  .btn-continue {
+    background: rgba(107,232,154,0.12);
+    border-color: rgba(107,232,154,0.3);
+    color: var(--done);
+  }
+  .btn-continue:hover:not(:disabled) { background: rgba(107,232,154,0.2); }
+
   .btn-restart {
     background: var(--done-dim);
     border-color: rgba(107,232,154,0.3);
@@ -324,7 +302,6 @@
   .btn-reset.show { display: inline-block; }
   .btn-reset:hover:not(:disabled) { background: rgba(255,255,255,0.05); color: var(--text); }
 
-  /* summary */
   .summary {
     width: 100%;
     display: none;
@@ -370,7 +347,6 @@
   .summary-val.highlight { color: var(--mission); }
   .summary-val.highlight-map { color: var(--map); }
 
-  /* pulse animation on active pip */
   @keyframes pip-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
@@ -381,7 +357,6 @@
     animation: pip-pulse 1.4s ease-in-out infinite;
   }
 
-  /* big number tick animation */
   @keyframes tick-flash {
     0% { opacity: 0.6; }
     100% { opacity: 1; }
@@ -429,6 +404,8 @@
 
   <div class="btn-row">
     <button class="btn btn-start" id="startBtn">Start mission</button>
+    <button class="btn btn-pause" id="pauseBtn" disabled>Pause mission</button>
+    <button class="btn btn-continue" id="continueBtn" disabled>Continue mission</button>
     <button class="btn btn-stop" id="stopBtn" disabled>End mission early</button>
     <button class="btn btn-restart" id="restartBtn">New team ↺</button>
     <button class="btn btn-reset" id="resetBtn">Reset ✕</button>
@@ -465,6 +442,7 @@
   let rem = MISSION;
   let missionUsed = 0;
   let iv = null;
+  let missionPaused = false;
 
   const timerNum = document.getElementById('timerNum');
   const timerSub = document.getElementById('timerSub');
@@ -476,6 +454,8 @@
   const progressPct = document.getElementById('progressPct');
   const toast = document.getElementById('toast');
   const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const continueBtn = document.getElementById('continueBtn');
   const stopBtn = document.getElementById('stopBtn');
   const restartBtn = document.getElementById('restartBtn');
   const resetBtn = document.getElementById('resetBtn');
@@ -530,12 +510,12 @@
     if (phase === 'mission') {
       phaseTag.classList.add('active-mission');
       phasePip.classList.add('active-mission');
-      phaseText.textContent = 'Mission timer';
+      phaseText.textContent = missionPaused ? 'Mission paused' : 'Mission timer';
       timerSub.textContent = 'mission timer';
       timerNum.classList.add('c-mission');
       timerSub.classList.add('c-mission');
       progressFill.style.background = 'var(--mission)';
-      setGlow('rgba(79,163,232,0.1)');
+      setGlow(missionPaused ? 'rgba(232,184,79,0.08)' : 'rgba(79,163,232,0.1)');
       topbarRight.textContent = '8:00 total';
     } else if (phase === 'map') {
       phaseTag.classList.add('active-map');
@@ -572,9 +552,12 @@
     phase = 'mission';
     rem = MISSION;
     missionUsed = 0;
+    missionPaused = false;
     summary.classList.remove('show');
     restartBtn.classList.remove('show');
     startBtn.disabled = true;
+    pauseBtn.disabled = false;
+    continueBtn.disabled = true;
     stopBtn.disabled = false;
     toast.textContent = '';
     toast.className = 'toast';
@@ -585,10 +568,37 @@
     iv = setInterval(doTick, 1000);
   }
 
+  function pauseMission() {
+    if (phase !== 'mission' || missionPaused) return;
+    clearInterval(iv);
+    missionPaused = true;
+    pauseBtn.disabled = true;
+    continueBtn.disabled = false;
+    stopBtn.disabled = false;
+    toast.textContent = 'Mission paused';
+    toast.className = 'toast t-warn';
+    applyPhaseStyle();
+  }
+
+  function continueMission() {
+    if (phase !== 'mission' || !missionPaused) return;
+    missionPaused = false;
+    pauseBtn.disabled = false;
+    continueBtn.disabled = true;
+    stopBtn.disabled = false;
+    toast.textContent = 'Mission resumed';
+    toast.className = 'toast';
+    applyPhaseStyle();
+    iv = setInterval(doTick, 1000);
+  }
+
   function startMap() {
     clearInterval(iv);
+    missionPaused = false;
     phase = 'map';
     rem = MAP;
+    pauseBtn.disabled = true;
+    continueBtn.disabled = true;
     stopBtn.disabled = true;
     toast.textContent = 'Mission ended — map phase begins';
     toast.className = 'toast t-warn';
@@ -607,12 +617,15 @@
   function finish() {
     clearInterval(iv);
     phase = 'done';
+    missionPaused = false;
     applyPhaseStyle();
     timerNum.textContent = '0:00';
     progressFill.style.width = '0%';
     progressPct.textContent = '100%';
     toast.textContent = 'Map phase complete — time\'s up!';
     toast.className = 'toast t-done';
+    pauseBtn.disabled = true;
+    continueBtn.disabled = true;
     stopBtn.disabled = true;
     restartBtn.classList.add('show');
 
@@ -623,11 +636,6 @@
     sumMap.textContent = '1:00 (completed)';
     summary.classList.add('show');
     updateSegs();
-
-    for (let i = 0; i < SEG_COUNT; i++) {
-      const el = document.getElementById('seg' + i);
-      if (el.classList.contains('used')) el.classList.add('used');
-    }
   }
 
   function doTick() {
@@ -646,7 +654,12 @@
         toast.className = 'toast t-warn';
       }
 
-      if (rem <= 0) { missionUsed = MISSION; startMap(); return; }
+      if (rem <= 0) {
+        missionUsed = MISSION;
+        startMap();
+        return;
+      }
+
       rem--;
 
     } else if (phase === 'map') {
@@ -662,7 +675,11 @@
         toast.className = 'toast t-warn';
       }
 
-      if (rem <= 0) { finish(); return; }
+      if (rem <= 0) {
+        finish();
+        return;
+      }
+
       rem--;
     }
   }
@@ -672,6 +689,7 @@
     phase = 'idle';
     rem = MISSION;
     missionUsed = 0;
+    missionPaused = false;
     timerNum.textContent = '8:00';
     timerNum.className = 'timer-num';
     timerSub.className = 'timer-sub';
@@ -682,6 +700,8 @@
     restartBtn.classList.remove('show');
     resetBtn.classList.remove('show');
     startBtn.disabled = false;
+    pauseBtn.disabled = true;
+    continueBtn.disabled = true;
     stopBtn.disabled = true;
     toast.textContent = '';
     toast.className = 'toast';
@@ -691,12 +711,15 @@
   }
 
   startBtn.addEventListener('click', startMission);
+  pauseBtn.addEventListener('click', pauseMission);
+  continueBtn.addEventListener('click', continueMission);
   stopBtn.addEventListener('click', endEarly);
   restartBtn.addEventListener('click', restart);
   resetBtn.addEventListener('click', restart);
 
   buildSegs();
   setGlow('rgba(79,163,232,0.06)');
+  progressFill.style.width = '100%';
 </script>
 </body>
 </html>
